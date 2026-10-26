@@ -45,6 +45,7 @@ import { ContentColumn } from '@components/layout';
 import { useMatchdayAvailability } from '@core/hooks/useMatchdayAvailability';
 import * as SeasonsApi from '@core/services/seasons';
 import { TeamFcpStats } from '@features/seasons/components/TeamFcpStats';
+import { CoachTour, useCoach, type CoachStep } from '@components/ui/CoachTour';
 import * as MatchdaysApi from '@core/services/matchdays';
 import {
   FederationSheet,
@@ -129,6 +130,34 @@ function surname(p: { name: string; alias?: string | null }): string {
  *    la ficha de cualquiera, en solo lectura.
  *  · «Parejas»: quién gana con quién (team_pair_stats), por victorias.
  */
+const ROSTER_STEPS: CoachStep[] = [
+  {
+    target: 'invite',
+    title: 'Invitar al equipo',
+    text: 'Manda el enlace o el código al grupo de WhatsApp. Cada jugador entra con su cuenta y se une a su ficha: no tienes que dar de alta a nadie a mano.',
+  },
+  {
+    target: 'roster',
+    title: 'Cómo llenar la plantilla',
+    text: 'En «Plantilla ▾» tienes tres caminos. El más rápido es la Federación.',
+    chips: [
+      'Traer de la Federación: tus jugadores con sus puntos oficiales',
+      'Escanear el ranking: haz una foto a la lista de puntos y TACTIUM la lee y crea los jugadores por ti',
+      'Añadir a mano: nombre, posición y puntos',
+    ],
+  },
+  {
+    target: 'notice',
+    title: 'Fichajes y temporada nueva',
+    text: 'Cuando la Federación abre la ventana de fichajes o publica la temporada, aparece un aviso aquí. Púlsalo y revisamos tu plantilla: los jugadores nuevos de tu equipo se añaden solos, con sus puntos.',
+  },
+  {
+    target: 'tabs',
+    title: 'Plantilla, Parejas y Stats',
+    text: 'Parejas: quién gana con quién, por victorias. Stats: tu equipo frente al resto del grupo, con tus mejores parejas y jugadores.',
+  },
+];
+
 export const TeamScreen = () => {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
@@ -148,6 +177,7 @@ export const TeamScreen = () => {
   // porque la RLS de `team_invitations` solo deja leer el código al admin del
   // equipo.)
   const canManage = useTeamStore(selectIsCaptain);
+  const rosterCoach = useCoach('roster', team?.id, canManage && !!team?.id, 1800);
   const loadForUser = useTeamStore((s) => s.loadForUser);
   const isFcpTeam = team?.federation === FCP_FEDERATION_CODE;
   const rootNav =
@@ -881,6 +911,7 @@ export const TeamScreen = () => {
 
   return (
     <View style={styles.root}>
+      <CoachTour coach={rosterCoach} steps={ROSTER_STEPS} />
       <View style={wide ? styles.tBody : styles.tBodyPhone}>
       <ScrollView
         ref={scrollRef}
@@ -921,6 +952,8 @@ export const TeamScreen = () => {
         {canManage ? (
           <View style={styles.btnRow}>
             <Pressable
+              ref={rosterCoach.ref('invite')}
+              collapsable={false}
               onPress={openInvite}
               accessibilityRole="button"
               style={({ pressed }) => [styles.btn, styles.btnAccent, pressed && { opacity: 0.85 }]}
@@ -929,6 +962,8 @@ export const TeamScreen = () => {
               <Text style={styles.btnAccentText}>Invitar</Text>
             </Pressable>
             <Pressable
+              ref={rosterCoach.ref('roster')}
+              collapsable={false}
               onPress={() => setMenuOpen(true)}
               accessibilityRole="button"
               accessibilityLabel="Plantilla: importar, añadir y editar el equipo"
@@ -948,7 +983,7 @@ export const TeamScreen = () => {
         </View>
 
         {notice ? (
-          <View style={styles.notice}>
+          <View style={styles.notice} ref={rosterCoach.ref('notice')} collapsable={false}>
             <Pressable
               onPress={() => setFedOpen(true)}
               accessibilityRole="button"
@@ -1072,7 +1107,7 @@ export const TeamScreen = () => {
 
         {/* ── Plantilla / Parejas ──────────────────────────────────── */}
         {players.length > 0 ? (
-          <View style={{ marginTop: 18 }}>
+          <View style={{ marginTop: 18 }} ref={rosterCoach.ref('tabs')} collapsable={false}>
             <SlidingSegment<Tab>
               value={tab}
               onChange={setTab}

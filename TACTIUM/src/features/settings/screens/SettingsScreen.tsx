@@ -1,4 +1,5 @@
 import { resetTutorials } from '@components/ui/TutorialSheet';
+import { resetCoachTours } from '@components/ui/CoachTour';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   View,
@@ -579,9 +580,9 @@ export const SettingsScreen = () => {
           <Row
             icon={<IconFile size={14} color={c.textMuted} />}
             title="Ver los tutoriales otra vez"
-            sub="Equipo, crear jornadas y alineaciones"
+            sub="Equipo, plantilla, jornadas y alineaciones"
             onPress={() =>
-              resetTutorials().then(() =>
+              Promise.all([resetTutorials(), resetCoachTours()]).then(() =>
                 Alert.alert('Listo', 'Los tutoriales volverán a salir la próxima vez que entres en cada sitio.'),
               )
             }

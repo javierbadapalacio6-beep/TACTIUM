@@ -1,4 +1,4 @@
-import { TutorialSheet, useAutoTutorial } from '@components/ui/TutorialSheet';
+import { CoachTour, useCoach, type CoachStep } from '@components/ui/CoachTour';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
@@ -92,6 +92,32 @@ import { fmtRango } from '@features/seasons/components/ligaParts';
  * El motor no cambia: orden por puntos, variantes, realtime, gates premium
  * (`lineup_edit` / `lineup_confirm`) y generador.
  */
+const lineupSteps = (tablet: boolean): CoachStep[] => [
+  {
+    target: 'generate',
+    title: 'Empieza por aquí',
+    text: 'Rellena las pistas con los jugadores que han dicho Voy, ordenados por puntos. Es un punto de partida: después lo ajustas a mano.',
+  },
+  {
+    target: 'courts',
+    title: 'Las pistas',
+    text: 'Cada pista es una pareja, de la más fuerte (P1) a la más floja. Toca un jugador colocado para seleccionarlo y toca otro hueco para intercambiarlos.',
+  },
+  {
+    target: 'bench',
+    title: 'El banquillo',
+    text: 'Tus jugadores, agrupados por su respuesta: Voy, Duda, Pendiente y No.',
+    chips: tablet
+      ? ['Arrastra un jugador a un hueco de la pista', 'O toca el jugador y después el hueco']
+      : ['Toca un jugador del banquillo', 'Toca el hueco de la pista donde lo quieres'],
+  },
+  {
+    target: 'publish',
+    title: 'Publicar',
+    text: 'Cuando las pistas estén completas, publícala: avisa al equipo. Cada cambio se guarda solo, así que puedes dejarla a medias y volver.',
+  },
+];
+
 export const LineupScreen = ({
   navigation,
   route,
@@ -107,7 +133,7 @@ export const LineupScreen = ({
   const isCaptain = useTeamStore(selectIsCaptain);
   const isClub = useTeamStore(selectIsClubAdmin);
   const gate = usePremiumGate();
-  const lineupTut = useAutoTutorial('lineup', undefined, isCaptain, 900);
+  const coach = useCoach('lineup', undefined, isCaptain, 1600);
   // Tablet: rail compacto (las pistas y el banquillo necesitan el ancho).
   // Horizontal: banquillo en columna fija a la derecha. Vertical: anclado
   // abajo en columnas por grupo. Móvil: la bandeja de siempre.
@@ -1017,7 +1043,6 @@ export const LineupScreen = ({
 
     return (
       <View style={styles.root}>
-        <TutorialSheet id="lineup" visible={lineupTut.visible} onClose={lineupTut.close} />
         {header(
           published ? (
             <Pressable onPress={shareLineup} hitSlop={8} accessibilityRole="button">
@@ -1067,7 +1092,6 @@ export const LineupScreen = ({
       : null;
     return (
       <View style={styles.root}>
-        <TutorialSheet id="lineup" visible={lineupTut.visible} onClose={lineupTut.close} />
         {header()}
         <ScrollView
           contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 32 }, isTablet && styles.tabletColumn]}
@@ -1199,6 +1223,8 @@ export const LineupScreen = ({
 
         {canEdit ? (
           <Pressable
+            ref={coach.ref('generate')}
+            collapsable={false}
             onPress={(e) => {
               e.stopPropagation();
               if (currentVariantId) setGenOpen(true);
@@ -1214,13 +1240,17 @@ export const LineupScreen = ({
           </Pressable>
         ) : null}
 
-        {courtList({ editable: canEdit })}
+        <View ref={coach.ref('courts')} collapsable={false}>
+          {courtList({ editable: canEdit })}
+        </View>
       </Pressable>
     </ScrollView>
   );
 
   const publishButton = (
     <Pressable
+      ref={coach.ref('publish')}
+      collapsable={false}
       disabled={missing > 0}
       onPress={openPublish}
       accessibilityRole="button"
@@ -1335,15 +1365,17 @@ export const LineupScreen = ({
               isAnimating={(id) => swapAnimIds.has(id)}
             />
           ) : (
-            <LineupBench
-              jornada={matchday.jornada_number}
-              groups={benchGroups}
-              sel={sel}
-              disabled={!canEdit}
-              bottomInset={0}
-              onTap={onBenchTap}
-              isAnimating={(id) => swapAnimIds.has(id)}
-            />
+            <View ref={coach.ref('bench')} collapsable={false}>
+              <LineupBench
+                jornada={matchday.jornada_number}
+                groups={benchGroups}
+                sel={sel}
+                disabled={!canEdit}
+                bottomInset={0}
+                onTap={onBenchTap}
+                isAnimating={(id) => swapAnimIds.has(id)}
+              />
+            </View>
           )}
           <View style={[styles.ctaWrap, { paddingBottom: Math.max(insets.bottom, 16) }]}>
             {publishButton}
@@ -1395,6 +1427,7 @@ export const LineupScreen = ({
 
   return (
     <Pressable onPress={() => setSel(null)} style={styles.root} android_disableSound>
+      <CoachTour coach={coach} steps={lineupSteps(isTablet)} />
       {isTablet ? (
         <LineupDragLayer enabled={canEdit} onDrop={onBenchDrop}>
           {wide ? wideBody : phoneBody}

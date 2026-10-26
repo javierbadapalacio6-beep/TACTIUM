@@ -1,4 +1,5 @@
 import { TutorialSheet, useTutorial } from '@components/ui/TutorialSheet';
+import { CoachTour, useCoach } from '@components/ui/CoachTour';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Animated, {
   useAnimatedStyle,
@@ -168,6 +169,7 @@ export const SeasonDetailScreen = ({
   const gate = usePremiumGate();
   // Primera vez: un mini tutorial y, al cerrarlo, se abre «Nueva jornada».
   const addTut = useTutorial('create-matchday');
+  const seasonCoach = useCoach('season-import', undefined, isCaptain && season?.active === true, 1500);
   const openAddMatchday = () => addTut.show(() => setAdding(true));
   const openScan = gate(() => setScanning(true), 'calendar_scan');
 
@@ -668,6 +670,21 @@ export const SeasonDetailScreen = ({
 
   return (
     <View style={styles.root}>
+      <CoachTour
+        coach={seasonCoach}
+        steps={[
+          {
+            target: 'add',
+            title: 'Meter las jornadas',
+            text: 'Toca ＋ para llenar la temporada. Lo más rápido es volcarla de golpe:',
+            chips: [
+              'Escanear el calendario: haz foto al PDF de la Federación y TACTIUM lo lee y crea todas las jornadas',
+              'Nueva jornada: una a una, con rival, casa o fuera, fecha y hora',
+              ...(isFcp ? ['Traer las actas: alineaciones y resultados de lo ya jugado'] : []),
+            ],
+          },
+        ]}
+      />
       {/* ── Nav bar ── */}
       <View style={[styles.nav, { paddingTop: insets.top + 10 }]}>
         <Pressable
@@ -683,6 +700,8 @@ export const SeasonDetailScreen = ({
         {canEditSeason ? (
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <Pressable
+              ref={seasonCoach.ref('add')}
+              collapsable={false}
               onPress={() => setAddMenu(true)}
               hitSlop={8}
               accessibilityRole="button"

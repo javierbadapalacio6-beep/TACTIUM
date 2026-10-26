@@ -518,7 +518,11 @@ export const FederacionScreen = ({
         ) : loading ? (
           <ActivityIndicator color={c.accent} style={{ marginTop: 30 }} />
         ) : tab === 'rankings' ? (
-          <ResultsRanking styles={styles} ranking={ranking} />
+          <ResultsRanking
+            styles={styles}
+            ranking={ranking}
+            onOpen={(r) => r.idJugador && goPlayer(r.idJugador, r.name)}
+          />
         ) : tab === 'equipos' ? (
           <ResultsTeams styles={styles} c={c} teams={teams} onPress={openTeam} emptyHint={teamHint(term)} />
         ) : tab === 'jugadores' ? (
@@ -870,7 +874,8 @@ const ResultsPlayers: React.FC<{
 const ResultsRanking: React.FC<{
   styles: ReturnType<typeof makeStyles>;
   ranking: FcpRankingRow[];
-}> = ({ styles, ranking }) => {
+  onOpen: (r: FcpRankingRow) => void;
+}> = ({ styles, ranking, onOpen }) => {
   if (ranking.length === 0)
     return <Text style={styles.hint}>No hay ranking para esa combinación de género y categoría.</Text>;
   return (
@@ -878,13 +883,21 @@ const ResultsRanking: React.FC<{
       {ranking.map((r) => {
         const medal = MEDAL[r.posicion];
         return (
-          <View key={`${r.posicion}-${r.name}`} style={styles.groupRow}>
+          <Pressable
+            key={`${r.posicion}-${r.name}`}
+            onPress={() => onOpen(r)}
+            disabled={!r.idJugador}
+            accessibilityRole={r.idJugador ? 'button' : undefined}
+            accessibilityLabel={r.idJugador ? `Ver la ficha de ${r.name}` : undefined}
+            style={({ pressed }) => [styles.groupRow, pressed && r.idJugador ? { opacity: 0.8 } : null]}
+          >
             <View style={[styles.posBadge, medal ? { backgroundColor: medal + '22', borderColor: medal + '66' } : null]}>
               <Text style={[styles.posText, medal ? { color: medal } : null]}>{r.posicion}</Text>
             </View>
             <Text style={[styles.groupName, { flex: 1, minWidth: 0 }]} numberOfLines={1}>{r.name}</Text>
             {r.puntos != null ? <Text style={styles.pts}>{fmtN(r.puntos)}</Text> : null}
-          </View>
+            {r.idJugador ? <Text style={{ color: '#8a948f', fontSize: 16 }}>›</Text> : null}
+          </Pressable>
         );
       })}
     </View>

@@ -581,6 +581,9 @@ export interface FcpRankingRow {
   posicion: number;
   name: string;
   puntos: number | null;
+  /** Ficha del jugador, para abrirla. Undefined si el nombre no cruza. */
+  idJugador?: string | null;
+  avatarUrl?: string | null;
 }
 
 /** Nombre de la lista de ranking en la FCP según género y categoría. Las listas
@@ -591,7 +594,32 @@ export function rankingCategoria(genero: 'all' | 'M' | 'F', categoria: string): 
   return `${categoria} CATEGORIA ${f ? 'FEMENINA' : 'MASCULINA'}`;
 }
 
-/** Ranking FCP (lista por género/categoría). Con término filtra por nombre. */
+/**
+ * Pone ficha y cara a las filas del ranking: la lista de la FCP solo trae el nombre, así que se cruza con
+ * `fcp_jugadores` (RPC `fcp_ranking_identities`, la misma que usa la web). Sin cruce, la fila no es pulsable.
+ */
+async function conIdentidad(rows: FcpRankingRow[]): Promise<FcpRankingRow[]> {
+  const nombres = [...new Set(rows.map((r) => r.name).filter((n) => n && n !== '—'))];
+  if (nombres.length === 0) return rows;
+  const rpc = supabase.rpc.bind(supabase) as unknown as (
+    fn: string,
+    args: Record<string, unknown>,
+  ) => Promise<{ data: unknown }>;
+  const found = new Map<string, { idJugador: string; avatarUrl: string | null }>();
+  for (let i = 0; i < nombres.length; i += 300) {
+    try {
+      const { data } = await rpc('fcp_ranking_identities', { p_nombres: nombres.slice(i, i + 300) });
+      for (const d of (data ?? []) as { nombre: string; id_jugador: string; avatar_url: string | null }[]) {
+        found.set(d.nombre, { idJugador: d.id_jugador, avatarUrl: d.avatar_url });
+      }
+    } catch {
+      /* sin cruce: se muestran los nombres sin enlace */
+    }
+  }
+  return rows.map((r) => ({ ...r, ...(found.get(r.name) ?? {}) }));
+}
+
+/** Ranking FCP (lista por género/categoría). Con término filtra por nombre. «Ambos» une las dos listas por puntos. */
 export async function fetchFcpRanking(opts: {
   genero: 'all' | 'M' | 'F';
   categoria: string;
@@ -599,16 +627,33 @@ export async function fetchFcpRanking(opts: {
   limit?: number;
 }): Promise<FcpRankingRow[]> {
   const { genero, categoria, query = '', limit = 150 } = opts;
-  const cat = rankingCategoria(genero, categoria);
-  let sel = rawFrom('fcp_rankings').select('posicion, nombre, puntos').eq('categoria', cat);
   const q = clean(query);
-  if (q.length >= 2) sel = sel.ilike('nombre', `%${q}%`);
-  const { data } = await sel.order('posicion', { ascending: true }).limit(limit);
-  return ((data ?? []) as { posicion: number; nombre: string | null; puntos: number | string | null }[]).map(
-    (r) => ({
-      posicion: r.posicion,
+  let rows: FcpRankingRow[];
+  if (genero === 'all') {
+    // La FCP no tiene una lista de ambos géneros: se traen las dos y se reordenan por puntos
+    // (la `posicion` oficial es por lista, así que al unir hay que recalcularla).
+    let sel = rawFrom('fcp_rankings')
+      .select('posicion, nombre, puntos')
+      .in('categoria', [rankingCategoria('M', categoria), rankingCategoria('F', categoria)]);
+    if (q.length >= 2) sel = sel.ilike('nombre', `%${q}%`);
+    const { data } = await sel.order('puntos', { ascending: false, nullsFirst: false }).limit(limit);
+    rows = ((data ?? []) as { nombre: string | null; puntos: number | string | null }[]).map((r, i) => ({
+      posicion: i + 1,
       name: r.nombre ?? '—',
       puntos: r.puntos == null ? null : Number(r.puntos),
-    }),
-  );
+    }));
+  } else {
+    const cat = rankingCategoria(genero, categoria);
+    let sel = rawFrom('fcp_rankings').select('posicion, nombre, puntos').eq('categoria', cat);
+    if (q.length >= 2) sel = sel.ilike('nombre', `%${q}%`);
+    const { data } = await sel.order('posicion', { ascending: true }).limit(limit);
+    rows = ((data ?? []) as { posicion: number; nombre: string | null; puntos: number | string | null }[]).map(
+      (r) => ({
+        posicion: r.posicion,
+        name: r.nombre ?? '—',
+        puntos: r.puntos == null ? null : Number(r.puntos),
+      }),
+    );
+  }
+  return conIdentidad(rows);
 }
